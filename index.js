@@ -2,12 +2,19 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-
+const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser");
 const port = process.env.PORT || 9000;
 const app = express();
 
-app.use(cors());
+app.use(
+  cors({
+    origin: ["http://localhost:5173"],
+    credentials: true,
+  })
+);
 app.use(express.json());
+app.use(cookieParser());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.s7kzw.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -26,10 +33,35 @@ async function run() {
     const db = client.db("soloworkDB");
     const jobs = db.collection("jobs");
 
+    app.post("/jwt", async (req, res) => {
+      const data = req.body;
+      const token = jwt.sign(data, process.env.JWT_SECRET, { expiresIn: "1h" });
+
+      res
+        .cookie("token", token, {
+          httpOnly: true,
+          secure: false,
+          sameSite: "strict",
+        })
+        .send({ success: true });
+    });
+
+    // middelware to check if the user is authenticated
+    function authenticateToken(req, res, next) {
+      const token = req?.cookies?.token;
+      console.log(token);
+
+      if (!token) return res.status(401).send({ message: "Unauthorized" });
+      jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+        if (err) return res.status(403).send({ message: "Forbidden" });
+        console.log(decoded);
+        next();
+      });
+    }
     app.get("/", async (req, res) => {
       res.send({ connected: true });
     });
-    app.get("/jobs", async (req, res) => {
+    app.get("/jobs", authenticateToken, async (req, res) => {
       const result = await jobs.find({}).toArray();
       res.send(result);
     });
