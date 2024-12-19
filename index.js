@@ -35,7 +35,9 @@ async function run() {
 
     app.post("/jwt", async (req, res) => {
       const data = req.body;
-      const token = jwt.sign(data, process.env.JWT_SECRET, { expiresIn: "1h" });
+      const token = jwt.sign(data, process.env.JWT_SECRET, {
+        expiresIn: "365d",
+      });
 
       res
         .cookie("token", token, {
@@ -53,7 +55,7 @@ async function run() {
 
       if (!token) return res.status(401).send({ message: "Unauthorized" });
       jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-        if (err) return res.status(403).send({ message: "Forbidden" });
+        if (err) return res.status(401).send({ message: "Forbidden" });
         console.log(decoded);
         next();
       });
@@ -62,7 +64,17 @@ async function run() {
       res.send({ connected: true });
     });
     app.get("/jobs", authenticateToken, async (req, res) => {
+      if (req?.query?.skip) {
+        const limit = parseInt(req.query.limit);
+        const skip = parseInt(req.query.skip) * limit || 0;
+        console.log(skip);
+        const result = await jobs.find({}).limit(limit).skip(skip).toArray();
+        res.send(result);
+        return;
+      }
+
       const result = await jobs.find({}).toArray();
+      console.log(req.query);
       res.send(result);
     });
     app.get("/jobs/:id", async (req, res) => {
